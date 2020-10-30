@@ -19,7 +19,7 @@
 // THE SOFTWARE.
 
 package elasticsearch
-
+ 
 import (
 	"time"
 )
