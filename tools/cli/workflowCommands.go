@@ -1830,7 +1830,7 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, domai
 		}
 	case "DecisionStartedTime":
 		earliestTime := parseTime(c.String(FlagEarliestTime), 0)
-		resetBaseRunID, decisionFinishID, err = getEarliestDecisionID(ctx, domain, wid, rid, earliestTime, frontendClient)
+		decisionFinishID, err = getEarliestDecisionID(ctx, domain, wid, rid, earliestTime, frontendClient)
 		if err != nil {
 			return
 		}
@@ -1840,8 +1840,7 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, domai
 	return
 }
 
-func getEarliestDecisionID(ctx context.Context, domain string, wid string, rid string, earliestTime int64, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
-	resetBaseRunID = rid
+func getEarliestDecisionID(ctx context.Context, domain string, wid string, rid string, earliestTime int64, frontendClient workflowserviceclient.Interface) (decisionFinishID int64, err error) {
 	req := &shared.GetWorkflowExecutionHistoryRequest{
 		Domain: common.StringPtr(domain),
 		Execution: &shared.WorkflowExecution{
@@ -1852,22 +1851,19 @@ func getEarliestDecisionID(ctx context.Context, domain string, wid string, rid s
 		NextPageToken:   nil,
 	}
 
+OuterLoop:
 	for {
 		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
 		if err != nil {
-			return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
+			return 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", err)
 		}
-		found := false
 		for _, e := range resp.GetHistory().GetEvents() {
 			if e.GetEventType() == shared.EventTypeDecisionTaskCompleted {
 				if e.GetTimestamp() >= earliestTime {
-					found = true
 					decisionFinishID = e.GetEventId()
+					break OuterLoop
 				}
 			}
-		}
-		if found {
-			break
 		}
 		if len(resp.NextPageToken) != 0 {
 			req.NextPageToken = resp.NextPageToken
@@ -1876,7 +1872,7 @@ func getEarliestDecisionID(ctx context.Context, domain string, wid string, rid s
 		}
 	}
 	if decisionFinishID == 0 {
-		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", fmt.Errorf("no DecisionFinishID"))
+		return 0, printErrorAndReturn("Get DecisionFinishID failed", fmt.Errorf("no DecisionFinishID"))
 	}
 	return
 }
